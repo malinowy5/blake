@@ -96,7 +96,7 @@ class Blake:
             self.c[4], self.c[5], self.c[6], self.c[7]
         ])
 
-        print(self.hash)
+        print(self)
 
     def Hash(self, data):
         self.data = data
@@ -105,6 +105,11 @@ class Blake:
         i_str = hex(i)[2:]
         i_sub = i_str[-end * 2: len(i_str) - start * 2]
         return int(i_sub or '0', 16)
+
+    def __str__(self):
+        format_hex = np.vectorize(lambda x: hex(x))
+        hex_dane = format_hex(self.hash)
+        return np.array2string(np.array(hex_dane).reshape(4, 4), separator=', ', formatter={'str_kind': lambda x: x})
 
 if __name__ == '__main__':
     blake = Blake(256)
