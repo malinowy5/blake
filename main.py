@@ -32,15 +32,16 @@ class Blake:
     def Init(self):
         # 224- and 256-bit versions (32-bit words)
         if ((self.hashbitlen == 224) or (self.hashbitlen == 256)):
+            # IVs
             if (self.hashbitlen == 224):
-                IV = np.array([
+                self.hash = np.array([
                   0xC1059ED8, 0x367CD507,
                   0x3070DD17, 0xF70E5939,
                   0xFFC00B31, 0x68581511,
                   0x64F98FA7, 0xBEFA4FA4
                 ])
             else:
-                IV = np.array([
+                self.hash = np.array([
                   0x6A09E667, 0xBB67AE85,
                   0x3C6EF372, 0xA54FF53A,
                   0x510E527F, 0x9B05688C,
@@ -58,14 +59,15 @@ class Blake:
             ])
         # 384- and 512-bit versions (64-bit words)
         elif ((self.hashbitlen == 384) or (self.hashbitlen == 512)):
+            # IVs
             if (self.hashbitlen == 384):
-                IV = np.array([
+                self.hash = np.array([
                       0xCBBB9D5DC1059ED8, 0x629A292A367CD507,
                       0x9159015A3070DD17, 0x152FECD8F70E5939,
                       0x67332667FFC00B31, 0x8EB44A8768581511,
                       0xDB0C2E0D64F98FA7, 0x47B5481DBEFA4FA4])
             else:
-                IV = np.array([
+                self.hash = np.array([
                       0x6A09E667F3BCC908, 0xBB67AE8584CAA73B,
                       0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
                       0x510E527FADE682D1, 0x9B05688C2B3E6C1F,
@@ -84,26 +86,58 @@ class Blake:
         else:
             raise ValueError("Invalid hashbitlen")
 
-        salt_0 = self.sub_bytes(self.salt, 0, 8)
-        salt_1 = self.sub_bytes(self.salt, 8, 16)
-        salt_2 = self.sub_bytes(self.salt, 16, 32)
-        salt_3 = self.sub_bytes(self.salt, 32, 64)
+    def Update(self):
+        self.block = 0
 
-        self.hash = np.array([
-            IV[0], IV[1], IV[2], IV[3],
-            IV[4], IV[5], IV[6], IV[7],
-            salt_0^self.c[0], salt_1^self.c[1], salt_2^self.c[2], salt_3^self.c[3],
-            self.c[4], self.c[5], self.c[6], self.c[7]
-        ])
+        salt_0 = self.sub_bytes(self.salt, 0, 4)
+        salt_1 = self.sub_bytes(self.salt, 4, 8)
+        salt_2 = self.sub_bytes(self.salt, 8, 16)
+        salt_3 = self.sub_bytes(self.salt, 16, 32)
 
-        print(self)
+        while int(self.block * self.hashbitlen / 8) <= self.data_len:
+            self.count += 512
+            t_0 = self.sub_bytes(self.count, 0, 4)
+            t_1 = self.sub_bytes(self.count, 4, 8)
+
+            self.m = np.empty(16)
+
+            for i in range(16):
+                self.m[i] = self.sub_bytes(self.data, int(self.block*self.hashbitlen/8)+i*4, int(self.block*self.hashbitlen/8)+(i+1)*4)
+
+            self.hash = np.array([
+                self.hash[0], self.hash[1], self.hash[2], self.hash[3],
+                self.hash[4], self.hash[5], self.hash[6], self.hash[7],
+                salt_0 ^ self.c[0], salt_1 ^ self.c[1], salt_2 ^ self.c[2], salt_3 ^ self.c[3],
+                t_0 ^ self.c[4], t_0 ^ self.c[5], t_1 ^ self.c[6], t_1 ^ self.c[7]
+            ])
+            self.block += 1
+            break
 
     def Hash(self, data):
-        self.data = data
+        self.data_len = len(data)
+        self.data = int.from_bytes(data.encode("utf-8"), byteorder='big')
+        print(self.data)
+        self.Update()
+
+    def G(self, a, b, c, d, i):
+        def rot(n, rotations, width=32):
+            return (2 ** width - 1) & (n >> rotations | n << (width - rotations))
+
+        self.hash[a] = (self.hash[a] + self.hash[b] + (self.m[self.perm[2 * i]] ^ self.c[self.perm[2 * i + 1]])) & 0xFFFFFFFF
+        self.hash[d] = rot(self.hash[d] ^ self.hash[a], 16)
+        self.hash[c] = (self.hash[c] + self.hash[d]) & 0xFFFFFFFF
+        self.hash[b] = rot(self.hash[b] ^ self.hash[c], 12)
+
+        self.hash[a] = (self.hash[a] + self.hash[b] + (self.m[self.perm[2 * i + 1]] ^ self.c[self.perm[2 * i]])) & 0xFFFFFFFF
+        self.hash[d] = rot(self.hash[d] ^ self.hash[a], 8)
+        self.hash[c] = (self.hash[c] + self.hash[d]) & 0xFFFFFFFF
+        self.hash[b] = rot(self.hash[b] ^ self.hash[c], 7)
+
 
     def sub_bytes(self, i, start=0, end=0):
         i_str = hex(i)[2:]
-        i_sub = i_str[-end * 2: len(i_str) - start * 2]
+        if len(i_str) < end * 2:i_str = i_str.zfill(end * 2)
+        i_sub = i_str[-end * 2: len(i_str) - start * 2] if end > 0 else i_str[:len(i_str) - start * 2]
         return int(i_sub or '0', 16)
 
     def __str__(self):
@@ -113,3 +147,4 @@ class Blake:
 
 if __name__ == '__main__':
     blake = Blake(256)
+    blake.Hash("abcde")
