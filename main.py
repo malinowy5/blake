@@ -2,7 +2,10 @@ import numpy as np
 
 class Blake:
     def __init__(self, hashbitlen=256, salt=0x0000000000000000000000000000000000000000000000000000000000000000):
-        self.hashbitlen = hashbitlen
+        self.data = None
+        self.hash = None
+        self.hash_bit_len = hashbitlen
+        self.arch = 32 if self.hash_bit_len <= 256 else 64
         self.count = 0x0
         self.salt = salt
         self.perm = np.array([
@@ -31,9 +34,9 @@ class Blake:
 
     def Init(self):
         # 224- and 256-bit versions (32-bit words)
-        if ((self.hashbitlen == 224) or (self.hashbitlen == 256)):
+        if ((self.hash_bit_len == 224) or (self.hash_bit_len == 256)):
             # IVs
-            if (self.hashbitlen == 224):
+            if (self.hash_bit_len == 224):
                 self.hash = np.array([
                   0xC1059ED8, 0x367CD507,
                   0x3070DD17, 0xF70E5939,
@@ -58,9 +61,9 @@ class Blake:
                 0x3F84D5B5, 0xB5470917
             ])
         # 384- and 512-bit versions (64-bit words)
-        elif ((self.hashbitlen == 384) or (self.hashbitlen == 512)):
+        elif (self.hash_bit_len == 384) or (self.hash_bit_len == 512):
             # IVs
-            if (self.hashbitlen == 384):
+            if self.hash_bit_len == 384:
                 self.hash = np.array([
                       0xCBBB9D5DC1059ED8, 0x629A292A367CD507,
                       0x9159015A3070DD17, 0x152FECD8F70E5939,
@@ -94,7 +97,7 @@ class Blake:
         salt_2 = self.sub_bytes(self.salt, 8, 16)
         salt_3 = self.sub_bytes(self.salt, 16, 32)
 
-        while int(self.block * self.hashbitlen / 8) <= self.data_len:
+        while int(self.block * self.hash_bit_len / 8) <= self.data_len:
             self.count += 512
             t_0 = self.sub_bytes(self.count, 0, 4)
             t_1 = self.sub_bytes(self.count, 4, 8)
@@ -102,7 +105,7 @@ class Blake:
             self.m = np.empty(16)
 
             for i in range(16):
-                self.m[i] = self.sub_bytes(self.data, int(self.block*self.hashbitlen/8)+i*4, int(self.block*self.hashbitlen/8)+(i+1)*4)
+                self.m[i] = self.sub_bytes(self.data, int(self.block * self.hash_bit_len / 8) + i * 4, int(self.block * self.hash_bit_len / 8) + (i + 1) * 4)
 
             self.hash = np.array([
                 self.hash[0], self.hash[1], self.hash[2], self.hash[3],
@@ -110,6 +113,17 @@ class Blake:
                 salt_0 ^ self.c[0], salt_1 ^ self.c[1], salt_2 ^ self.c[2], salt_3 ^ self.c[3],
                 t_0 ^ self.c[4], t_0 ^ self.c[5], t_1 ^ self.c[6], t_1 ^ self.c[7]
             ])
+
+            for r in range(10 if self.arch==32 else 14):
+                self.G( 0, 4, 8, 12, 0)
+                self.G( 1, 5, 9, 13, 1)
+                self.G( 2, 6, 10, 14, 2)
+                self.G( 3, 7, 11, 15, 3)
+                self.G( 0, 5, 10, 15, 4)
+                self.G( 1, 6, 11, 12, 5)
+                self.G( 2, 7, 8, 13, 6)
+                self.G( 3, 4, 9, 14, 7)
+
             self.block += 1
             break
 
